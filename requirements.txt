@@ -4,3 +4,4 @@ matplotlib
 pandas
 streamlit-aggrid
 pytz
+pandas_market_calendars
