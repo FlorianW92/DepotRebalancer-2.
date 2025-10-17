@@ -128,3 +128,4 @@ for sector, target in sector_targets.items():
         else:  # Untergewicht
             buy_candidate = sector_df.sort_values("MarketValue").iloc[0]["Name"]
             st.info(f"📈 {sector}: {round(abs(diff),2)} € zu wenig – erhöhe Anteil durch **{buy_candidate}** oder in untergewichtete Sektoren umschichten.")
+
