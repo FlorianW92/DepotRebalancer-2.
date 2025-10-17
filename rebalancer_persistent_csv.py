@@ -44,15 +44,6 @@ try:
 except:
     eurusd = 1.08
 
-# ---------------- XETRA-Kalender ----------------
-xetra = mcal.get_calendar("XETR")
-def next_trading_day(date):
-    schedule = xetra.schedule(start_date=date, end_date=date + pd.Timedelta(days=30))
-    for day in schedule.index:
-        if day.date() >= date.date():
-            return pd.Timestamp(day)
-    return pd.Timestamp(date)
-
 # ---------------- Kursabruf ----------------
 def get_price(ticker, currency):
     try:
@@ -66,31 +57,13 @@ def get_price(ticker, currency):
     except Exception:
         return None
 
-st.sidebar.title("⚙️ Einstellungen")
-if st.sidebar.button("📊 Kurse aktualisieren"):
+# ---------------- Kursaktualisierung ----------------
+if "Price" not in df.columns or st.button("📊 Kurse aktualisieren"):
     df["Price"] = [get_price(t, c) for t, c in zip(df["Ticker"], df["Currency"])]
     df.to_csv(DATA_PATH, index=False)
-
-if "Price" not in df.columns:
-    df["Price"] = [get_price(t, c) for t, c in zip(df["Ticker"], df["Currency"])]
 
 # ---------------- Marktwerte ----------------
-df["MarketValue"] = (df["Price"] * df["Shares"]).fillna(0).round(2)
-
-# ---------------- Sparplan ab 6.11.2025 ----------------
-today = pd.Timestamp(datetime.now(timezone("Europe/Berlin")).date())
-plan_day = next_trading_day(pd.Timestamp(2025, 11, 6))
-
-if today >= plan_day:
-    for idx, row in df.iterrows():
-        if row["Sector"] == "Bestand":  # VW ausschließen
-            continue
-        price = row["Price"] or get_price(row["Ticker"], row["Currency"])
-        if price and price > 0:
-            new_shares = row["MonthlyAmount"] / price
-            df.at[idx, "Shares"] += new_shares
-    df.to_csv(DATA_PATH, index=False)
-    st.success(f"Sparplan automatisch ausgeführt am {plan_day.date()} ✅")
+df["MarketValue"] = (df["Shares"] * df["Price"]).fillna(0).round(2)
 
 # ---------------- Editierbare Shares ----------------
 st.title("💼 Depot & Shares Editierbar")
@@ -116,9 +89,9 @@ df.to_csv(DATA_PATH, index=False)
 
 # ---------------- Pie Chart ----------------
 st.subheader("📊 Sektoraufteilung (ohne VW)")
-display_df = df[df["Sector"]!="Bestand"]
+display_df = df[df["Sector"] != "Bestand"]
 total_value = display_df["MarketValue"].sum()
-if total_value>0:
+if total_value > 0:
     sector_summary = display_df.groupby("Sector")["MarketValue"].sum().reset_index()
     sector_summary["Percent"] = (sector_summary["MarketValue"]/total_value*100).round(2)
     fig, ax = plt.subplots()
@@ -143,10 +116,10 @@ for sector, target in sector_targets.items():
     sector_df = display_df[display_df["Sector"]==sector]
     current = sector_df["MarketValue"].sum()
     diff = current - target
-    if abs(diff)>10:
-        if diff>0:  # Übergewicht
+    if abs(diff) > 10:
+        if diff > 0:  # Übergewicht
             sell_candidate = sector_df.sort_values("MarketValue", ascending=False).iloc[0]["Name"]
-            buy_sector = [s for s in sector_targets if s!=sector]
+            buy_sector = [s for s in sector_targets if s != sector]
             buy_sector_values = {s: display_df[display_df["Sector"]==s]["MarketValue"].sum() for s in buy_sector}
             under_sector = min(buy_sector_values, key=buy_sector_values.get)
             st.warning(f"📉 {sector}: {round(diff,2)} € zu viel – verkaufe ggf. **{sell_candidate}** und schichte in **{under_sector}** um.")
