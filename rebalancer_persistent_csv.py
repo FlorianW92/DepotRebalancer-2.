@@ -71,10 +71,13 @@ grid_response = AgGrid(
     fit_columns_on_grid_load=True
 )
 
-# Werte in Session State übernehmen
-updated_df = grid_response['data']
-for i, t in enumerate(df["Ticker"]):
-    st.session_state.shares_dict[t] = updated_df[i]['Shares']
+# Robust: Spaltenname in Grid finden
+grid_df = grid_response['data']
+shares_col = [col for col in grid_df.columns if "Shares" in col][0]
+
+# Session State aktualisieren
+for i, ticker in enumerate(df["Ticker"]):
+    st.session_state.shares_dict[ticker] = grid_df.iloc[i][shares_col]
 
 # MarketValue neu berechnen und CSV speichern
 df["Shares"] = df["Ticker"].map(st.session_state.shares_dict)
