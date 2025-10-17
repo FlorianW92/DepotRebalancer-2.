@@ -5,7 +5,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 from pytz import timezone
 import matplotlib.pyplot as plt
-import pandas_market_calendars as mcal
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 st.set_page_config(page_title="Depot Rebalancer", layout="wide")
 
@@ -65,27 +65,29 @@ if "Price" not in df.columns or st.button("📊 Kurse aktualisieren"):
 # ---------------- Marktwerte ----------------
 df["MarketValue"] = (df["Shares"] * df["Price"]).fillna(0).round(2)
 
-# ---------------- Editierbare Shares ----------------
+# ---------------- Editierbare Shares mit AgGrid ----------------
 st.title("💼 Depot & Shares Editierbar")
 
-# Session-State Dictionary initialisieren
-if "shares_dict" not in st.session_state:
-    st.session_state.shares_dict = {row["Ticker"]: row["Shares"] for idx, row in df.iterrows()}
+gb = GridOptionsBuilder.from_dataframe(df)
+gb.configure_default_column(editable=True)
+gb.configure_column("Shares", editable=True)
+gb.configure_selection(selection_mode="single", use_checkbox=True)
+grid_options = gb.build()
 
-# Eingabe pro Aktie
-for idx, row in df.iterrows():
-    shares = st.number_input(
-        label=f'{row["Name"]} ({row["Ticker"]})',
-        min_value=0.0,
-        value=st.session_state.shares_dict[row["Ticker"]],
-        step=0.01
-    )
-    st.session_state.shares_dict[row["Ticker"]] = shares
-    df.at[idx, "Shares"] = shares
+grid_response = AgGrid(
+    df,
+    gridOptions=grid_options,
+    update_mode=GridUpdateMode.MODEL_CHANGED,
+    height=400,
+    fit_columns_on_grid_load=True,
+    enable_enterprise_modules=False
+)
 
-# Marktwert berechnen und CSV speichern
+updated_df = grid_response['data']
+# Speichern in CSV
+updated_df.to_csv(DATA_PATH, index=False)
+df = updated_df.copy()
 df["MarketValue"] = (df["Shares"] * df["Price"]).round(2)
-df.to_csv(DATA_PATH, index=False)
 
 # ---------------- Pie Chart ----------------
 st.subheader("📊 Sektoraufteilung (ohne VW)")
