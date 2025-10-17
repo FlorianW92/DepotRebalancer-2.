@@ -91,8 +91,7 @@ ax.pie(sector_summary["MarketValue"], labels=sector_summary["Sector"], autopct="
 st.pyplot(fig)
 
 # ---------------- Rebalancing Hinweise ----------------
-st.subheader("🔄 Umschichtungsplan (inkl. Ziel 1 Mio. €)")
-target_total = 1_000_000
+st.subheader("🔄 Umschichtungsplan (Sektor- & Aktiengewicht)")
 for sector in df["Sector"].unique():
     if sector=="Bestand": continue
     sec_df = df[df["Sector"]==sector].copy()
@@ -100,13 +99,12 @@ for sector in df["Sector"].unique():
     for idx, row in sec_df.iterrows():
         target_pct = row["MonthlyAmount"]/sec_df["MonthlyAmount"].sum()
         actual_pct = row["MarketValue"]/total_mv if total_mv>0 else 0
-        target_value = target_pct * target_total
-        if row["MarketValue"] < target_value*0.95:
-            st.write(f"{row['Name']} ({sector}) unter Ziel ({row['MarketValue']:.0f}€ vs. {target_value:.0f}€) → **aufstocken**")
-        elif row["MarketValue"] > target_value*1.05:
+        if actual_pct < target_pct*0.95:
+            st.write(f"{row['Name']} ({sector}) unter Zielgewicht ({actual_pct:.1%} vs. {target_pct:.1%}) → **aufstocken**")
+        elif actual_pct > target_pct*1.05:
             # Vorschlag wohin umschichten
             others = sec_df[sec_df["Name"]!=row["Name"]]
             underweight = others[others["MarketValue"]/total_mv < (others["MonthlyAmount"]/sec_df["MonthlyAmount"].sum())]
             if not underweight.empty:
                 target = underweight.iloc[0]["Name"]
-                st.write(f"{row['Name']} ({sector}) über Ziel ({row['MarketValue']:.0f}€) → in {target} umschichten oder Teilverkauf erwägen")
+                st.write(f"{row['Name']} ({sector}) über Zielgewicht ({actual_pct:.1%}) → in {target} umschichten oder Teilverkauf erwägen")
