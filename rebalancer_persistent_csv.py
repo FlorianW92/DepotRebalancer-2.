@@ -92,15 +92,27 @@ if today >= plan_day:
     df.to_csv(DATA_PATH, index=False)
     st.success(f"Sparplan automatisch ausgeführt am {plan_day.date()} ✅")
 
-# ---------------- Editierbare Tabelle ----------------
+# ---------------- Editierbare Shares ----------------
 st.title("💼 Depot & Shares Editierbar")
-edited_df = st.experimental_data_editor(df[["Name","Ticker","Sector","Shares","Price","MarketValue"]], num_rows="dynamic")
 
-# --------- Speichern von Änderungen sofort in CSV ----------
-for i, ticker in enumerate(edited_df["Ticker"]):
-    df.loc[df["Ticker"]==ticker,"Shares"] = edited_df.at[i,"Shares"]
-df["MarketValue"] = (df["Shares"]*df["Price"]).round(2)
-df.to_csv(DATA_PATH,index=False)
+# Session-State Dictionary initialisieren
+if "shares_dict" not in st.session_state:
+    st.session_state.shares_dict = {row["Ticker"]: row["Shares"] for idx, row in df.iterrows()}
+
+# Eingabe pro Aktie
+for idx, row in df.iterrows():
+    shares = st.number_input(
+        label=f'{row["Name"]} ({row["Ticker"]})',
+        min_value=0.0,
+        value=st.session_state.shares_dict[row["Ticker"]],
+        step=0.01
+    )
+    st.session_state.shares_dict[row["Ticker"]] = shares
+    df.at[idx, "Shares"] = shares
+
+# Marktwert berechnen und speichern
+df["MarketValue"] = (df["Shares"] * df["Price"]).round(2)
+df.to_csv(DATA_PATH, index=False)
 
 # ---------------- Pie Chart ----------------
 st.subheader("📊 Sektoraufteilung (ohne VW)")
