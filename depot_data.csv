@@ -1,6 +1,6 @@
 Name,Ticker,Sector,MonthlyAmount,Shares,Currency
 NVIDIA,NVDA,Technologie & KI,75,0,USD
-Microsoft,MSFT,Technologie & KI,50,0,USD
+Microsoft,MSFT,Technologie & KI,50,2,USD
 Alphabet,GOOGL,Technologie & KI,50,0.23,USD
 ASML,ASML,Technologie & KI,25,0,EUR
 CrowdStrike,CRWD,Cybersecurity / Cloud,25,0,USD
