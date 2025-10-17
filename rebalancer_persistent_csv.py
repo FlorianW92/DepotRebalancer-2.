@@ -10,7 +10,7 @@ import pandas_market_calendars as mcal
 st.set_page_config(page_title="Depot Rebalancer", layout="wide")
 
 # --------------------------------------------------------
-# 📁 Pfad zur CSV im selben Ordner wie Script
+# 📁 Pfad zur CSV im selben Ordner
 # --------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "depot_data.csv")
@@ -21,7 +21,6 @@ DATA_PATH = os.path.join(BASE_DIR, "depot_data.csv")
 if os.path.exists(DATA_PATH):
     df = pd.read_csv(DATA_PATH)
 else:
-    # Leeres Beispiel-Depot
     initial_data = [
         ["NVIDIA","NVDA","Technologie & KI",75,0,"USD"],
         ["Microsoft","MSFT","Technologie & KI",50,0,"USD"],
@@ -44,7 +43,7 @@ else:
     df.to_csv(DATA_PATH, index=False)
 
 # --------------------------------------------------------
-# 💱 USD → EUR Umrechnung
+# 💱 USD→EUR Kurs
 # --------------------------------------------------------
 try:
     eurusd = yf.Ticker("EURUSD=X").history(period="1d")["Close"].iloc[-1]
@@ -63,68 +62,86 @@ def next_trading_day(date):
     return pd.Timestamp(date)
 
 # --------------------------------------------------------
-# 📈 Kurse abrufen
+# 📈 Kursabruf
 # --------------------------------------------------------
 def get_price(ticker, currency):
     try:
-        data = yf.Ticker(ticker).history(period="1d", interval="1m")
+        data = yf.Ticker(ticker).history(period="1d")
+        if data.empty:
+            return None
         price = float(data["Close"].iloc[-1])
         if currency == "USD":
             price /= eurusd
-        return round(price,2)
-    except:
+        return round(price, 2)
+    except Exception:
         return None
 
 # --------------------------------------------------------
-# ⚙️ Kursaktualisierung über Button
+# ⚙️ Kursaktualisierung
 # --------------------------------------------------------
 st.sidebar.title("⚙️ Einstellungen")
 if st.sidebar.button("📊 Kurse aktualisieren"):
-    df["Price"] = [get_price(t, c) for t,c in zip(df["Ticker"], df["Currency"])]
+    st.toast("Lade aktuelle Kurse ...")
+    df["Price"] = [get_price(t, c) for t, c in zip(df["Ticker"], df["Currency"])]
     df.to_csv(DATA_PATH, index=False)
 else:
     if "Price" not in df.columns:
-        df["Price"] = [get_price(t, c) for t,c in zip(df["Ticker"], df["Currency"])]
+        df["Price"] = [get_price(t, c) for t, c in zip(df["Ticker"], df["Currency"])]
 
-df["MarketValue"] = (df["Price"]*df["Shares"]).round(2)
-df["MarketValue"] = df["MarketValue"].fillna(0)
+# --------------------------------------------------------
+# 💰 Marktwerte
+# --------------------------------------------------------
+df["MarketValue"] = (df["Price"] * df["Shares"]).fillna(0).round(2)
 
 # --------------------------------------------------------
 # 📆 Sparplan ab 6.11.2025
 # --------------------------------------------------------
 today = pd.Timestamp(datetime.now(timezone("Europe/Berlin")).date())
-plan_day = pd.Timestamp(2025,11,6)
-plan_day = next_trading_day(plan_day)
+plan_day = next_trading_day(pd.Timestamp(2025, 11, 6))
 
 if today >= plan_day:
-    for idx,row in df.iterrows():
-        if row["Ticker"] == "VOW3.DE":  # VW nicht im Sparplan
+    for idx, row in df.iterrows():
+        if row["Sector"] == "Bestand":  # VW ausschließen
             continue
         price = row["Price"] or get_price(row["Ticker"], row["Currency"])
-        if price and price>0:
-            new_shares = row["MonthlyAmount"]/price
-            df.at[idx,"Shares"] = df.at[idx,"Shares"] + new_shares
+        if price and price > 0:
+            new_shares = row["MonthlyAmount"] / price
+            df.at[idx, "Shares"] += new_shares
     st.success(f"Sparplan automatisch ausgeführt am {plan_day.date()} ✅")
-
-df.to_csv(DATA_PATH, index=False)
+    df.to_csv(DATA_PATH, index=False)
 
 # --------------------------------------------------------
-# 📊 Visualisierung ohne VW
+# 🧮 Darstellung & Analyse
 # --------------------------------------------------------
-st.title("💼 Dein Depot")
+st.title("💼 Dein persönlicher Depot Rebalancer")
+
 df_display = df.copy()
-total_value = df_display.loc[df_display["Sector"]!="Bestand","MarketValue"].sum()
+total_value = df_display.loc[df_display["Sector"] != "Bestand", "MarketValue"].sum()
 
 sector_summary = (
-    df_display[df_display["Sector"]!="Bestand"]
-    .groupby("Sector")["MarketValue"].sum()
+    df_display[df_display["Sector"] != "Bestand"]
+    .groupby("Sector")["MarketValue"]
+    .sum()
     .reset_index()
 )
-sector_summary["Percent"] = (sector_summary["MarketValue"]/total_value*100).round(2)
+sector_summary["Percent"] = (sector_summary["MarketValue"] / total_value * 100).round(2)
 
-fig, ax = plt.subplots()
-ax.pie(sector_summary["MarketValue"], labels=sector_summary["Sector"], autopct="%1.1f%%")
-st.pyplot(fig)
+# --------------------------------------------------------
+# 🥧 Pie Chart mit Fehlerprüfung
+# --------------------------------------------------------
+st.subheader("📊 Sektoraufteilung (ohne VW)")
+if not sector_summary.empty and sector_summary["MarketValue"].sum() > 0:
+    fig, ax = plt.subplots()
+    ax.pie(
+        sector_summary["MarketValue"],
+        labels=sector_summary["Sector"],
+        autopct="%1.1f%%",
+        startangle=90
+    )
+    ax.axis("equal")
+    st.pyplot(fig)
+else:
+    st.info("Keine Kursdaten vorhanden. Bitte zuerst '📊 Kurse aktualisieren' klicken.")
 
 # --------------------------------------------------------
 # 🔄 Umschichtungsvorschläge
@@ -139,17 +156,18 @@ sector_targets = {
     "Konsum & Industrie": 50,
 }
 
-for sector,target in sector_targets.items():
-    current = df_display[df_display["Sector"]==sector]["MarketValue"].sum()
+for sector, target in sector_targets.items():
+    current = df_display[df_display["Sector"] == sector]["MarketValue"].sum()
     diff = current - target
-    if abs(diff)>10:
-        if diff>0:
-            suggestion = df_display[df_display["Sector"]==sector].sort_values("MarketValue",ascending=False).iloc[0]["Name"]
-            st.warning(f"📉 {sector}: {round(diff,2)} € zu viel – verkaufe ggf. {suggestion} und schichte in untergewichtete Sektoren um.")
+    if abs(diff) > 10:
+        if diff > 0:
+            suggestion = df_display[df_display["Sector"] == sector].sort_values("MarketValue", ascending=False).iloc[0]["Name"]
+            st.warning(f"📉 {sector}: {round(diff, 2)} € zu viel – verkaufe ggf. **{suggestion}** und schichte in untergewichtete Sektoren um.")
         else:
-            st.info(f"📈 {sector}: {round(abs(diff),2)} € zu wenig – erhöhe Anteil durch Nachkauf.")
+            st.info(f"📈 {sector}: {round(abs(diff), 2)} € zu wenig – erhöhe Anteil durch Nachkauf.")
 
 # --------------------------------------------------------
 # 📋 Tabelle
 # --------------------------------------------------------
-st.dataframe(df_display[["Name","Ticker","Sector","Shares","Price","MarketValue"]])
+st.subheader("📋 Aktuelles Depot")
+st.dataframe(df_display[["Name", "Ticker", "Sector", "Shares", "Price", "MarketValue"]])
