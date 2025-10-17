@@ -1,42 +1,20 @@
-import os
+import streamlit as st
 import pandas as pd
 import yfinance as yf
-import streamlit as st
-from datetime import datetime, timedelta
-from pytz import timezone
 import matplotlib.pyplot as plt
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+import pandas_market_calendars as mcal
+from datetime import datetime, timedelta
+import os
 
-st.set_page_config(page_title="Depot Rebalancer", layout="wide")
+# ---------------- Pfade ----------------
+DATA_PATH = "depot_data.csv"
 
-# ---------------- CSV-Datei Pfad ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "depot_data.csv")
-
-# ---------------- CSV laden oder erstellen ----------------
+# ---------------- CSV laden ----------------
 if os.path.exists(DATA_PATH):
     df = pd.read_csv(DATA_PATH)
 else:
-    initial_data = [
-        ["NVIDIA","NVDA","Technologie & KI",75,0,"USD"],
-        ["Microsoft","MSFT","Technologie & KI",50,0,"USD"],
-        ["Alphabet","GOOGL","Technologie & KI",50,0,"USD"],
-        ["ASML","ASML","Technologie & KI",25,0,"EUR"],
-        ["CrowdStrike","CRWD","Cybersecurity / Cloud",25,0,"USD"],
-        ["ServiceNow","NOW","Cybersecurity / Cloud",25,0,"USD"],
-        ["First Solar","FSLR","Erneuerbare Energien & Infra",50,0,"USD"],
-        ["NextEra Energy","NEE","Erneuerbare Energien & Infra",25,0,"USD"],
-        ["Brookfield Renewable","BEPC","Erneuerbare Energien & Infra",25,0,"USD"],
-        ["Tesla","TSLA","Zukunft / Disruption",37.5,0,"USD"],
-        ["Palantir","PLTR","Zukunft / Disruption",25,0,"USD"],
-        ["Super Micro Computer","SMCI","Zukunft / Disruption",12.5,0,"USD"],
-        ["Johnson & Johnson","JNJ","Gesundheit / Stabilität",25,0,"USD"],
-        ["Novo Nordisk","NVO","Gesundheit / Stabilität",25,0,"USD"],
-        ["Apple","AAPL","Konsum & Industrie",25,0,"USD"],
-        ["Volkswagen","VOW3.DE","Bestand",0,57.213,"EUR"],
-    ]
-    df = pd.DataFrame(initial_data, columns=["Name","Ticker","Sector","MonthlyAmount","Shares","Currency"])
-    df.to_csv(DATA_PATH, index=False)
+    st.error("CSV-Datei nicht gefunden!")
 
 # ---------------- USD->EUR ----------------
 try:
@@ -44,34 +22,40 @@ try:
 except:
     eurusd = 1.08
 
-# ---------------- Kursabruf ----------------
+# ---------------- Kurse abrufen ----------------
 def get_price(ticker, currency):
     try:
         data = yf.Ticker(ticker).history(period="1d")
-        if data.empty:
-            return None
         price = float(data["Close"].iloc[-1])
-        if currency == "USD":
+        if currency=="USD":
             price /= eurusd
-        return round(price, 2)
+        return round(price,2)
     except:
         return None
 
-# ---------------- Kursaktualisierung ----------------
+# ---------------- Kurse aktualisieren ----------------
 if "Price" not in df.columns or st.button("📊 Kurse aktualisieren"):
-    df["Price"] = [get_price(t, c) for t, c in zip(df["Ticker"], df["Currency"])]
-    df.to_csv(DATA_PATH, index=False)
+    df["Price"] = [get_price(t,c) for t,c in zip(df["Ticker"], df["Currency"])]
 
-# ---------------- Marktwerte ----------------
-df["MarketValue"] = (df["Shares"] * df["Price"]).fillna(0).round(2)
+# ---------------- Marktwert berechnen ----------------
+df["MarketValue"] = (df["Shares"] * df["Price"]).round(2)
 
-# ---------------- Editierbare Shares mit AgGrid ----------------
-st.title("💼 Depot & Shares Editierbar")
+# ---------------- Sparplan Datum ----------------
+start_date = datetime(2025,11,6)
+nyse = mcal.get_calendar('XNYS')
+today = pd.Timestamp.today()
+def next_trading_day(d):
+    schedule = nyse.schedule(start_date=d, end_date=d+timedelta(days=7))
+    if d in schedule.index:
+        return d
+    else:
+        return schedule.index[0]
+plan_day = next_trading_day(start_date)
 
+# ---------------- AgGrid Editierbar ----------------
+st.title("💼 Dein optimiertes Depot")
 gb = GridOptionsBuilder.from_dataframe(df)
-gb.configure_default_column(editable=True)
 gb.configure_column("Shares", editable=True)
-gb.configure_selection(selection_mode="single", use_checkbox=True)
 grid_options = gb.build()
 
 grid_response = AgGrid(
@@ -79,53 +63,36 @@ grid_response = AgGrid(
     gridOptions=grid_options,
     update_mode=GridUpdateMode.MODEL_CHANGED,
     height=400,
-    fit_columns_on_grid_load=True,
-    enable_enterprise_modules=False
+    fit_columns_on_grid_load=True
 )
 
+# ---------------- CSV speichern ----------------
 updated_df = grid_response['data']
-# Speichern in CSV
-updated_df.to_csv(DATA_PATH, index=False)
-df = updated_df.copy()
+df['Shares'] = updated_df['Shares']
 df["MarketValue"] = (df["Shares"] * df["Price"]).round(2)
+df.to_csv(DATA_PATH, index=False)
 
-# ---------------- Pie Chart ----------------
-st.subheader("📊 Sektoraufteilung (ohne VW)")
-display_df = df[df["Sector"] != "Bestand"]
-total_value = display_df["MarketValue"].sum()
-if total_value > 0:
-    sector_summary = display_df.groupby("Sector")["MarketValue"].sum().reset_index()
-    sector_summary["Percent"] = (sector_summary["MarketValue"]/total_value*100).round(2)
-    fig, ax = plt.subplots()
-    ax.pie(sector_summary["MarketValue"], labels=sector_summary["Sector"], autopct="%1.1f%%", startangle=90)
-    ax.axis("equal")
-    st.pyplot(fig)
-else:
-    st.info("Keine Daten für Pie Chart vorhanden.")
+# ---------------- Pie Charts ----------------
+sector_summary = df[df["Sector"]!="Bestand"].groupby("Sector")["MarketValue"].sum().reset_index()
+fig, ax = plt.subplots()
+ax.pie(sector_summary["MarketValue"], labels=sector_summary["Sector"], autopct="%1.1f%%")
+st.pyplot(fig)
 
-# ---------------- Umschichtungsvorschläge ----------------
-st.subheader("💡 Umschichtungsvorschläge")
-sector_targets = {
-    "Technologie & KI":200,
-    "Cybersecurity / Cloud":50,
-    "Erneuerbare Energien & Infra":100,
-    "Zukunft / Disruption":100,
-    "Gesundheit / Stabilität":50,
-    "Konsum & Industrie":50,
-}
-
-for sector, target in sector_targets.items():
-    sector_df = display_df[display_df["Sector"]==sector]
-    current = sector_df["MarketValue"].sum()
-    diff = current - target
-    if abs(diff) > 10:
-        if diff > 0:  # Übergewicht
-            sell_candidate = sector_df.sort_values("MarketValue", ascending=False).iloc[0]["Name"]
-            buy_sector = [s for s in sector_targets if s != sector]
-            buy_sector_values = {s: display_df[display_df["Sector"]==s]["MarketValue"].sum() for s in buy_sector}
-            under_sector = min(buy_sector_values, key=buy_sector_values.get)
-            st.warning(f"📉 {sector}: {round(diff,2)} € zu viel – verkaufe ggf. **{sell_candidate}** und schichte in **{under_sector}** um.")
-        else:  # Untergewicht
-            buy_candidate = sector_df.sort_values("MarketValue").iloc[0]["Name"]
-            st.info(f"📈 {sector}: {round(abs(diff),2)} € zu wenig – erhöhe Anteil durch **{buy_candidate}** oder in untergewichtete Sektoren umschichten.")
-
+# ---------------- Rebalancing Hinweise ----------------
+st.subheader("🔄 Umschichtungsplan")
+for sector in df["Sector"].unique():
+    if sector=="Bestand":
+        continue
+    sector_df = df[df["Sector"]==sector]
+    total_mv = sector_df["MarketValue"].sum()
+    for idx, row in sector_df.iterrows():
+        target_pct = row["MonthlyAmount"] / sector_df["MonthlyAmount"].sum()
+        actual_pct = row["MarketValue"] / total_mv if total_mv>0 else 0
+        if actual_pct < target_pct*0.95:
+            st.write(f"{row['Name']} ({sector}): aktuell {actual_pct:.1%}, Ziel {target_pct:.1%} → **aufstocken**")
+        elif actual_pct > target_pct*1.05:
+            # Vorschlag wohin umschichten
+            others = sector_df[sector_df["Name"]!=row["Name"]]
+            if not others.empty:
+                target = others.iloc[0]["Name"]
+                st.write(f"{row['Name']} ({sector}): aktuell {actual_pct:.1%}, Ziel {target_pct:.1%} → **in {target} umschichten**")
