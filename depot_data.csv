@@ -1,0 +1,17 @@
+Name,Ticker,Sector,MonthlyAmount,Shares,Currency
+NVIDIA,NVDA,Technologie & KI,75,0,USD
+Microsoft,MSFT,Technologie & KI,50,0,USD
+Alphabet,GOOGL,Technologie & KI,50,0,USD
+ASML,ASML,Technologie & KI,25,0,EUR
+CrowdStrike,CRWD,Cybersecurity / Cloud,25,0,USD
+ServiceNow,NOW,Cybersecurity / Cloud,25,0,USD
+First Solar,FSLR,Erneuerbare Energien & Infra,50,0,USD
+NextEra Energy,NEE,Erneuerbare Energien & Infra,25,0,USD
+Brookfield Renewable,BEPC,Erneuerbare Energien & Infra,25,0,USD
+Tesla,TSLA,Zukunft / Disruption,37.5,0,USD
+Palantir,PLTR,Zukunft / Disruption,25,0,USD
+Super Micro Computer,SMCI,Zukunft / Disruption,12.5,0,USD
+Johnson & Johnson,JNJ,Gesundheit / Stabilität,25,0,USD
+Novo Nordisk,NVO,Gesundheit / Stabilität,25,0,USD
+Apple,AAPL,Konsum & Industrie,25,0,USD
+Volkswagen,VOW3.DE,Bestand,0,57.213,EUR
