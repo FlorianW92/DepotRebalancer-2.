@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import yfinance as yf
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 from pytz import timezone
 import matplotlib.pyplot as plt
 import pandas_market_calendars as mcal
@@ -54,7 +54,7 @@ def get_price(ticker, currency):
         if currency == "USD":
             price /= eurusd
         return round(price, 2)
-    except Exception:
+    except:
         return None
 
 # ---------------- Kursaktualisierung ----------------
@@ -83,7 +83,7 @@ for idx, row in df.iterrows():
     st.session_state.shares_dict[row["Ticker"]] = shares
     df.at[idx, "Shares"] = shares
 
-# Marktwert berechnen und speichern
+# Marktwert berechnen und CSV speichern
 df["MarketValue"] = (df["Shares"] * df["Price"]).round(2)
 df.to_csv(DATA_PATH, index=False)
 
